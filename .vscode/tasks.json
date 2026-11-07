@@ -1,0 +1,45 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "行情看板：启动（可见窗口）",
+      "type": "shell",
+      "command": ".\\start.bat",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "group": { "kind": "build", "isDefault": true }
+    },
+    {
+      "label": "行情看板：后台启动（无窗口）",
+      "type": "process",
+      "command": "wscript.exe",
+      "args": ["${workspaceFolder}\\run_hidden.vbs"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "行情看板：状态检查",
+      "type": "shell",
+      "command": ".\\status.bat",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "行情看板：停止服务",
+      "type": "shell",
+      "command": ".\\stop.bat",
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "行情看板：环境自检",
+      "type": "shell",
+      "command": ".\\start.bat",
+      "args": ["check"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    }
+  ]
+}
