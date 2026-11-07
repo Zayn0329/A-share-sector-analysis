@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>全市场指数与行业板块资金监控台</title>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== 上部分：约占页面 1/4，三大指数 ===== -->
+  <section class="top-zone">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <h1>全市场指数与板块资金监控台</h1>
+        <span class="brand-sub">INDEX · SECTOR FLOW</span>
+      </div>
+      <div class="market-status" id="market-status">正在连接数据源…</div>
+      <div class="top-actions">
+        <span class="clock" id="clock">--:--:--</span>
+        <button class="btn" id="refresh" type="button">刷新数据</button>
+      </div>
+    </header>
+
+    <div class="indices">
+      <article class="idx-card" data-key="sh">
+        <div class="idx-head"><span class="idx-name">上证指数</span><span class="idx-code">000001.SH</span><span class="idx-time">--</span></div>
+        <div class="idx-quote"><span class="idx-price">—</span><span class="idx-chg">—</span></div>
+        <div class="idx-extra">成交额 —</div>
+        <div class="trend-wrap"><canvas></canvas><div class="trend-tip"></div></div>
+        <div class="idx-axis"><span>09:30</span><span>11:30 / 13:00</span><span>15:00</span></div>
+      </article>
+      <article class="idx-card" data-key="hsi">
+        <div class="idx-head"><span class="idx-name">恒生指数</span><span class="idx-code">HSI.HK</span><span class="idx-time">--</span></div>
+        <div class="idx-quote"><span class="idx-price">—</span><span class="idx-chg">—</span></div>
+        <div class="idx-extra">成交额 —</div>
+        <div class="trend-wrap"><canvas></canvas><div class="trend-tip"></div></div>
+        <div class="idx-axis"><span>09:30</span><span>12:00 / 13:00</span><span>16:00</span></div>
+      </article>
+      <article class="idx-card" data-key="cyb">
+        <div class="idx-head"><span class="idx-name">创业板指</span><span class="idx-code">399006.SZ</span><span class="idx-time">--</span></div>
+        <div class="idx-quote"><span class="idx-price">—</span><span class="idx-chg">—</span></div>
+        <div class="idx-extra">成交额 —</div>
+        <div class="trend-wrap"><canvas></canvas><div class="trend-tip"></div></div>
+        <div class="idx-axis"><span>09:30</span><span>11:30 / 13:00</span><span>15:00</span></div>
+      </article>
+    </div>
+    <div class="zone-note" id="index-note">数据源加载中…</div>
+  </section>
+
+  <!-- ===== 中间最大部分：10 个行业排序榜 ===== -->
+  <main class="mid-zone">
+    <div class="switch-bar">
+      <div class="switch-group">
+        <span class="switch-label">排序方向</span>
+        <div class="seg" id="order-switch">
+          <button type="button" class="on" data-order="up">涨最多排前面</button>
+          <button type="button" data-order="down">跌最多排前面</button>
+        </div>
+      </div>
+      <div class="switch-group right">
+        <div class="tabs" id="tabs">
+          <button type="button" class="tab on" data-type="industry">行业板块</button>
+          <button type="button" class="tab" data-type="concept">概念板块</button>
+          <button type="button" class="tab" data-type="region">地域板块</button>
+        </div>
+        <span class="sector-meta" id="sector-meta">正在取数…</span>
+      </div>
+    </div>
+
+    <div class="rank-head">
+      <span>名次</span><span>板块</span><span>涨跌幅</span><span>流通总市值</span>
+      <span>涨跌幅 × 流通市值</span><span>主力资金线条</span><span>主力净额</span>
+    </div>
+    <div class="rank-list" id="rank-list"></div>
+    <div class="rank-legend">
+      <span id="rank-rule">排序：涨跌幅 × 流通总市值，取前 10 个板块，数值最大在最上</span>
+      <span class="legend-right">线条长度 ∝ 主力净额（榜内统一比例尺）；<i class="sw red"></i>净流入 <i class="sw blue"></i>净流出，流入最多的线条最长</span>
+    </div>
+  </main>
+
+  <!-- ===== 底部：资金汇总环图与口径说明 ===== -->
+  <footer class="bottom-zone">
+    <div class="sum-block">
+      <div class="donut-wrap"><div class="donut" id="donut-in"></div><div class="donut-center" id="donut-in-center">—</div></div>
+      <div class="sum-text">
+        <div class="sum-title">本榜主力净流入</div>
+        <div class="sum-value up" id="sum-in-value">—</div>
+        <div class="sum-sub" id="sum-in-sub">—</div>
+      </div>
+    </div>
+    <div class="sum-center" id="sum-center">正在汇总…</div>
+    <div class="sum-block">
+      <div class="donut-wrap"><div class="donut" id="donut-out"></div><div class="donut-center" id="donut-out-center">—</div></div>
+      <div class="sum-text">
+        <div class="sum-title">本榜主力净流出</div>
+        <div class="sum-value blue" id="sum-out-value">—</div>
+        <div class="sum-sub" id="sum-out-sub">—</div>
+      </div>
+    </div>
+    <div class="footnote" id="footnote">数据加载中…</div>
+  </footer>
+</div>
+
+<div class="tooltip" id="tooltip"></div>
+<script src="/app.js"></script>
+</body>
+</html>
