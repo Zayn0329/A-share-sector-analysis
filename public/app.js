@@ -104,7 +104,7 @@ function drawTrend(card) {
   const pts = cfg && cfg.available && cfg.trends ? cfg.trends.points : [];
   if (!pts.length) {
     ctx.fillStyle = '#a3a8b1';
-    ctx.font = '11px sans-serif';
+    ctx.font = '12px sans-serif';
     ctx.textAlign = 'center';
     ctx.fillText(cfg && !cfg.available ? '数据源暂不可用' : '正在加载分时数据…', w / 2, h / 2);
     tip.style.display = 'none';
@@ -147,7 +147,7 @@ function drawTrend(card) {
   ctx.setLineDash([]);
 
   // 坐标标签
-  ctx.font = '9px "Segoe UI", sans-serif';
+  ctx.font = '10px "Segoe UI", sans-serif';
   ctx.fillStyle = '#a3a8b1';
   ctx.textAlign = 'left';
   ctx.fillText(fmtNum(yTop, 2), padL + 1, padT + 9);
@@ -413,7 +413,7 @@ async function loadSectors() {
 
 const tooltip = $('#tooltip');
 function positionTooltip(e) {
-  const w = tooltip.offsetWidth || 268;
+  const w = tooltip.offsetWidth || 288;
   const h = tooltip.offsetHeight || 220;
   let x = e.clientX + 14, y = e.clientY + 14;
   if (x + w > window.innerWidth - 8) x = e.clientX - w - 14;
