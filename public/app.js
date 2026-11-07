@@ -399,8 +399,7 @@ async function loadSectors() {
       (d.complete ? '' : ` · 分页取数 ${d.returned}/${d.rawTotal}`) +
       (d.upstreamError ? ` · 上游异常，展示缓存：${d.upstreamError}` : '') + ' · 自动刷新 30 秒';
     $('#footnote').innerHTML =
-      `数据来源：${esc(d.source)}；指数来源：${esc(state.indices ? state.indices.source : '东方财富行情接口')}；数据时点：${esc(d.dataTime || '—')}（北京时间，${esc(d.market ? d.market.aShare : '')}）。` +
-      `分级行业数值为方向性估算，红涨绿跌；线条与环图的主力净额口径见中部说明。` +
+      `数据来源：${esc(d.source)} / ${esc(state.indices ? state.indices.source : '东方财富行情接口')}；数据时点 ${esc(d.dataTime || '—')}（北京时间，${esc(d.market ? d.market.aShare : '')}）；口径说明见中部与底部。` +
       `<b>免责声明</b>：以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。任何投资决策应结合个人风险承受能力、资金状况和投资目标独立判断，必要时咨询持牌专业机构。过往表现不预示未来收益。`;
     renderRanks();
   } catch (e) {
