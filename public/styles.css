@@ -236,13 +236,28 @@ button { cursor: pointer; }
 .donut-wrap { position: relative; width: 108px; height: 108px; flex: 0 0 108px; }
 .donut { width: 108px; height: 108px; }
 .donut svg { display: block; }
+.donut-seg { cursor: pointer; }
 .donut-empty { display: flex; align-items: center; justify-content: center; height: 100%; color: #b3b8c0; font-size: 13px; }
 .donut-center {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   pointer-events: none; font-size: 11px; color: #8b9199; transform: translateY(26px);
+  transition: opacity .16s ease;
 }
+.donut-pop {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%) scale(.94);
+  z-index: 20; pointer-events: none; opacity: 0;
+  min-width: 88px; max-width: 104px; padding: 5px 7px;
+  border-radius: 6px; background: #fff; border: 1px solid var(--line);
+  box-shadow: 0 3px 10px rgba(60, 50, 30, .16);
+  text-align: center; font-size: 11px; line-height: 1.35; color: var(--ink);
+  transition: opacity .16s ease, transform .16s ease;
+}
+.donut-pop.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+.donut-pop b { display: block; font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.donut-pop .pop-amt { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; }
 .sum-text { min-width: 0; }
-.sum-title { font-size: 12px; color: #7d838d; margin-bottom: 4px; }
+.sum-title { font-size: 12px; color: #7d838d; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sum-value { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .sum-sub { font-size: 11px; color: #9a9fa8; margin-top: 4px; }
 .sum-center {

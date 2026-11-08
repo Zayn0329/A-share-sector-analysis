@@ -82,21 +82,29 @@
     </div>
   </main>
 
-  <!-- ===== 底部：资金汇总环图与口径说明 ===== -->
+  <!-- ===== 底部：今日盘口资金前十环图与口径说明 ===== -->
   <footer class="bottom-zone">
     <div class="sum-block">
-      <div class="donut-wrap"><div class="donut" id="donut-in"></div><div class="donut-center" id="donut-in-center">—</div></div>
+      <div class="donut-wrap">
+        <div class="donut" id="donut-in"></div>
+        <div class="donut-center" id="donut-in-center">—</div>
+        <div class="donut-pop" id="donut-in-pop" data-kind="in"></div>
+      </div>
       <div class="sum-text">
-        <div class="sum-title">本榜主力净流入</div>
+        <div class="sum-title">今日盘口净流入 · 流入板块前十位</div>
         <div class="sum-value up" id="sum-in-value">—</div>
         <div class="sum-sub" id="sum-in-sub">—</div>
       </div>
     </div>
     <div class="sum-center" id="sum-center">正在汇总…</div>
     <div class="sum-block">
-      <div class="donut-wrap"><div class="donut" id="donut-out"></div><div class="donut-center" id="donut-out-center">—</div></div>
+      <div class="donut-wrap">
+        <div class="donut" id="donut-out"></div>
+        <div class="donut-center" id="donut-out-center">—</div>
+        <div class="donut-pop" id="donut-out-pop" data-kind="out"></div>
+      </div>
       <div class="sum-text">
-        <div class="sum-title">本榜主力净流出</div>
+        <div class="sum-title">今日盘口净流出 · 流出板块前十位</div>
         <div class="sum-value blue" id="sum-out-value">—</div>
         <div class="sum-sub" id="sum-out-sub">—</div>
       </div>

@@ -340,57 +340,120 @@ function renderRanks() {
       <span class="rk-flow ${flowRed ? 'up' : 'blue'}">${yi(x.mainNet, true)}亿</span>
     </div>`;
   }).join('');
-  renderSummary(top);
 }
 
-function drawDonut(el, segments, palette) {
+/* 底部环图：数据来自全市场资金流前十 / 后十，与中部榜单完全解耦 */
+const DONUT_R = 42, DONUT_W = 16, DONUT_C = 2 * Math.PI * DONUT_R;
+
+// 内径 r-w/2 = 34 保持不变，外径由 50 扩到 56；弧长按半径比例缩放以维持扇区角度
+function animateDonutSeg(seg, expand) {
+  if (!seg || typeof seg.getAttribute !== 'function') return;
+  if (seg._raf) cancelAnimationFrame(seg._raf);
+  const fromR = Number(seg.getAttribute('r')) || DONUT_R;
+  const fromW = Number(seg.getAttribute('stroke-width')) || DONUT_W;
+  const toR = expand ? 45 : DONUT_R;
+  const toW = expand ? 22 : DONUT_W;
+  const len = Number(seg.dataset.len) || 0;
+  const acc = Number(seg.dataset.acc) || 0;
+  const t0 = performance.now(), dur = 180;
+  const step = now => {
+    const t = Math.min(1, (now - t0) / dur);
+    const e = 1 - Math.pow(1 - t, 3);
+    const r = fromR + (toR - fromR) * e;
+    const w = fromW + (toW - fromW) * e;
+    const k = r / DONUT_R;
+    seg.setAttribute('r', r.toFixed(2));
+    seg.setAttribute('stroke-width', w.toFixed(2));
+    seg.setAttribute('stroke-dasharray', Math.max(0, len * k - 1.5).toFixed(2) + ' ' + (DONUT_C * k).toFixed(2));
+    seg.setAttribute('stroke-dashoffset', (-acc * k).toFixed(2));
+    seg._raf = t < 1 ? requestAnimationFrame(step) : 0;
+  };
+  seg._raf = requestAnimationFrame(step);
+}
+
+function drawDonut(el, segments, palette, pop) {
+  if (!el) return;
   const total = segments.reduce((s, x) => s + Math.max(0, x.value), 0);
-  if (!total) { el.innerHTML = '<div class="donut-empty">无数据</div>'; return; }
-  const R = 42, C = 2 * Math.PI * R, cx = 56, cy = 56;
-  let acc = 0, bestLen = 0, bestMid = 0;
+  if (!total || !segments.length) {
+    el.innerHTML = '<div class="donut-empty">无数据</div>';
+    if (pop) pop.className = 'donut-pop';
+    return;
+  }
+  const cx = 56, cy = 56;
+  let acc = 0;
   let html = '<svg viewBox="0 0 112 112" width="112" height="112" aria-hidden="true">';
-  html += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="#f1ece0" stroke-width="16"/>`;
+  html += `<circle cx="${cx}" cy="${cy}" r="${DONUT_R}" fill="none" stroke="#f1ece0" stroke-width="${DONUT_W}" pointer-events="none"/>`;
   segments.slice(0, 10).forEach((s, i) => {
-    const len = Math.max(0, s.value) / total * C;
-    if (len > bestLen) { bestLen = len; bestMid = acc + len / 2; }
-    html += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="${palette[i % palette.length]}" stroke-width="16" ` +
-      `stroke-dasharray="${Math.max(0, len - 1.5).toFixed(2)} ${C.toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" ` +
-      `transform="rotate(-90 ${cx} ${cy})"><title>${esc(s.name)}：${yi(s.value, false)} 亿</title></circle>`;
+    const len = Math.max(0, s.value) / total * DONUT_C;
+    html += `<circle class="donut-seg" cx="${cx}" cy="${cy}" r="${DONUT_R}" fill="none" ` +
+      `stroke="${palette[i % palette.length]}" stroke-width="${DONUT_W}" ` +
+      `stroke-dasharray="${Math.max(0, len - 1.5).toFixed(2)} ${DONUT_C.toFixed(2)}" stroke-dashoffset="${(-acc).toFixed(2)}" ` +
+      `data-name="${esc(s.name)}" data-value="${yi(s.value, false)}" data-len="${len.toFixed(3)}" data-acc="${acc.toFixed(3)}" ` +
+      `transform="rotate(-90 ${cx} ${cy})"></circle>`;
     acc += len;
   });
-  const ang = (-90 + bestMid / C * 360) * Math.PI / 180;
-  const x2 = cx + Math.cos(ang) * 30, y2 = cy + Math.sin(ang) * 30;
-  html += `<line x1="${cx}" y1="${cy}" x2="${x2.toFixed(2)}" y2="${y2.toFixed(2)}" stroke="#5b4b8a" stroke-width="2.5" stroke-linecap="round"/>`;
-  html += `<circle cx="${cx}" cy="${cy}" r="7" fill="#fff" stroke="#d8c98f" stroke-width="2"/>`;
-  html += `<circle cx="${cx}" cy="${cy}" r="3" fill="#c9a55c"/></svg>`;
+  html += `<circle cx="${cx}" cy="${cy}" r="3" fill="#c9a55c" pointer-events="none"/></svg>`;
   el.innerHTML = html;
+  el._active = null;
+
+  // 事件只绑定一次，避免每次重绘累积监听
+  if (el._donutBound) return;
+  el._donutBound = true;
+  const center = el.parentNode && el.parentNode.querySelector ? el.parentNode.querySelector('.donut-center') : null;
+  const hidePop = () => {
+    if (el._active) { animateDonutSeg(el._active, false); el._active = null; }
+    if (pop) pop.className = 'donut-pop';
+    if (center) center.style.opacity = '';
+  };
+  el.addEventListener('mouseover', e => {
+    const seg = e.target && e.target.closest ? e.target.closest('.donut-seg') : null;
+    if (!seg) return;
+    if (el._active && el._active !== seg) animateDonutSeg(el._active, false);
+    el._active = seg;
+    animateDonutSeg(seg, true);
+    if (pop) {
+      const isIn = pop.dataset.kind === 'in';
+      pop.innerHTML = `<b>${esc(seg.dataset.name)}</b><span class="pop-amt ${isIn ? 'up' : 'blue'}">` +
+        `${isIn ? '+' : '−'}${esc(seg.dataset.value)} 亿</span>`;
+      pop.className = 'donut-pop show';
+    }
+    if (center) center.style.opacity = '0';
+  });
+  el.addEventListener('mouseout', e => {
+    const seg = e.target && e.target.closest ? e.target.closest('.donut-seg') : null;
+    if (!seg) return;
+    const to = e.relatedTarget;
+    if (to && typeof to.closest === 'function' && to.closest('.donut-seg')) return;
+    hidePop();
+  });
+  el.addEventListener('mouseleave', hidePop);
 }
 
-function renderSummary(top) {
-  const d = state.sectors;
-  const ins = top.filter(x => x.mainNet > 0);
-  const outs = top.filter(x => x.mainNet < 0);
-  const inSum = ins.reduce((s, x) => s + x.mainNet, 0);
-  const outSum = outs.reduce((s, x) => s + Math.abs(x.mainNet), 0);
-  const net = top.reduce((s, x) => s + x.mainNet, 0);
-  const scoreSum = top.reduce((s, x) => s + x.score, 0);
+// 汇总数据只看全市场资金流：净流入前十 / 净流出前十，与中部榜单（按涨跌幅×流通市值排序）无关
+function renderSummary(d) {
+  const notes = (d && d.notes) || { flow: '', overlap: '', score: '' };
+  const items = (d && Array.isArray(d.items)) ? d.items.filter(x => Number.isFinite(x.mainNet)) : [];
+  const inflow = items.filter(x => x.mainNet > 0).slice().sort((a, b) => b.mainNet - a.mainNet).slice(0, 10);
+  const outflow = items.filter(x => x.mainNet < 0).slice().sort((a, b) => a.mainNet - b.mainNet).slice(0, 10);
+  const inSum = inflow.reduce((s, x) => s + x.mainNet, 0);
+  const outSum = outflow.reduce((s, x) => s + Math.abs(x.mainNet), 0);
+  const net = inSum - outSum;
 
-  drawDonut($('#donut-in'), ins.map(x => ({ name: x.name, value: x.mainNet })), REDS);
-  drawDonut($('#donut-out'), outs.map(x => ({ name: x.name, value: Math.abs(x.mainNet) })), BLUES);
-  $('#donut-in-center').textContent = ins.length + ' 个板块';
-  $('#donut-out-center').textContent = outs.length + ' 个板块';
+  drawDonut($('#donut-in'), inflow.map(x => ({ name: x.name, value: x.mainNet })), REDS, $('#donut-in-pop'));
+  drawDonut($('#donut-out'), outflow.map(x => ({ name: x.name, value: Math.abs(x.mainNet) })), BLUES, $('#donut-out-pop'));
+  $('#donut-in-center').textContent = '流入前十';
+  $('#donut-out-center').textContent = '流出前十';
   $('#sum-in-value').textContent = yi(inSum, true) + ' 亿';
   $('#sum-out-value').textContent = '−' + fmtNum(outSum / 1e8, 2) + ' 亿';
-  $('#sum-in-sub').textContent = `占本榜 ${ins.length}/10 · 扇区为各板块净流入占比`;
-  $('#sum-out-sub').textContent = `占本榜 ${outs.length}/10 · 扇区为各板块净流出占比`;
+  $('#sum-in-sub').textContent = `全市场 ${items.length} 个板块 · 净流入前 ${inflow.length} 位，扇区为净流入占比`;
+  $('#sum-out-sub').textContent = `全市场 ${items.length} 个板块 · 净流出前 ${outflow.length} 位，扇区为净流出占比`;
 
   $('#sum-center').innerHTML =
-    `<div class="center-big">本榜主力净额合计 <b class="${cls(net)}">${yi(net, true)} 亿</b></div>` +
-    `<div class="center-line">排序指标合计（涨跌幅 × 流通市值）：<b class="${cls(scoreSum)}">${yi(scoreSum, true)} 亿</b> · 展示 ${top.length} / ${d.count} 个板块</div>` +
-    `<div class="center-line">${esc(d.notes.score)}</div>` +
-    `<div class="center-line muted">${esc(d.notes.flow)}</div>` +
-    `<div class="center-line muted">${esc(d.notes.overlap)}</div>` +
-    `<div class="center-line muted">数据时点 ${esc(d.dataTime || '—')}（北京时间）· 来源 ${esc(d.source)}</div>`;
+    `<div class="center-big">今日盘口净额（前十对前十） <b class="${cls(net)}">${yi(net, true)} 亿</b></div>` +
+    `<div class="center-line">流入前十合计 <b class="up">+${fmtNum(inSum / 1e8, 2)} 亿</b> · 流出前十合计 <b class="blue">−${fmtNum(outSum / 1e8, 2)} 亿</b></div>` +
+    `<div class="center-line">${esc(notes.flow)}</div>` +
+    `<div class="center-line muted">${esc(notes.overlap)}</div>` +
+    `<div class="center-line muted">数据时点 ${esc(d && d.dataTime ? d.dataTime : '—')}（北京时间）· 来源 ${esc(d && d.source ? d.source : '—')}</div>`;
 }
 
 async function loadSectors(force) {
@@ -407,6 +470,7 @@ async function loadSectors(force) {
       `数据来源：${esc(d.source)} / ${esc(state.indices ? state.indices.source : '东方财富行情接口')}；数据时点 ${esc(d.dataTime || '—')}（北京时间，${esc(d.market ? d.market.aShare : '')}）；口径说明见中部与底部。` +
       `<b>免责声明</b>：以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。任何投资决策应结合个人风险承受能力、资金状况和投资目标独立判断，必要时咨询持牌专业机构。过往表现不预示未来收益。`;
     renderRanks();
+    renderSummary(d);
     return { ok: !d.upstreamError, error: d.upstreamError || '' };
   } catch (e) {
     $('#sector-meta').textContent = '数据源暂不可用';
