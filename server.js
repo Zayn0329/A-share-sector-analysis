@@ -109,19 +109,21 @@ async function getJson(url) {
 const cache = new Map();
 const inflight = new Map();
 
-async function withCache(key, ttlMs, producer) {
+async function withCache(key, ttlMs, producer, force) {
   const hit = cache.get(key);
-  if (hit && Date.now() < hit.expires) return { ...hit.data, cache: 'hit' };
+  // force=1（手动刷新）跳过缓存且不写入缓存，避免影响自动刷新节奏
+  if (!force && hit && Date.now() < hit.expires) return { ...hit.data, cache: 'hit' };
   if (inflight.has(key)) return inflight.get(key);
 
   const task = (async () => {
     try {
       const data = await producer();
       const payload = { ...data, fetchedAt: beijingNow() };
-      cache.set(key, { data: payload, expires: Date.now() + ttlMs });
+      if (!force) cache.set(key, { data: payload, expires: Date.now() + ttlMs });
       return { ...payload, cache: 'miss' };
     } catch (err) {
-      if (hit) return { ...hit.data, cache: 'stale', upstreamError: String(err && err.message || err) };
+      // 手动刷新失败要如实报错；自动刷新才允许降级到上次缓存
+      if (!force && hit) return { ...hit.data, cache: 'stale', upstreamError: String(err && err.message || err) };
       throw err;
     }
   })().finally(() => inflight.delete(key));
@@ -330,14 +332,21 @@ const server = http.createServer(async (req, res) => {
   const p = u.pathname;
 
   try {
+    const m = marketStatus();
+    // 盘中/休市用不同缓存键，状态切换时不会读到上一状态的旧缓存
+    const phase = m.trading ? 'live' : 'closed';
+    const force = u.searchParams.get('force') === '1';
     if (p === '/api/indices') {
-      const payload = await withCache('indices', 15000, fetchIndices);
+      // 盘中 0.9s < 前端 1s；休市 60s < 前端 120s；force=1 由 withCache 跳过缓存
+      const ttl = m.trading ? 900 : 60000;
+      const payload = await withCache('indices:' + phase, ttl, fetchIndices, force);
       return sendJson(res, 200, { ...payload, market: marketStatus() });
     }
     if (p === '/api/sectors') {
       const type = u.searchParams.get('type') || 'industry';
       if (!SECTOR_TYPES[type]) return sendJson(res, 400, { error: '未知板块类型', detail: type });
-      const payload = await withCache('sectors:' + type, 30000, () => fetchSectors(type));
+      const ttl = m.trading ? 4500 : 60000;
+      const payload = await withCache('sectors:' + phase + ':' + type, ttl, () => fetchSectors(type), force);
       return sendJson(res, 200, { ...payload, market: marketStatus() });
     }
     if (p === '/api/health') {

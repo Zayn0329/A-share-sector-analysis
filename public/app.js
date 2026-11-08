@@ -280,22 +280,26 @@ function renderIndexCard(cfg) {
   drawTrend(card);
 }
 
-async function loadIndices() {
+async function loadIndices(force) {
   try {
-    const d = await api('/api/indices');
+    const d = await api('/api/indices' + (force ? '?force=1' : ''));
     state.indices = d;
     renderMarket(d.market);
+    applyRefreshSchedule(d.market);
     const first = d.indices.find(x => x.available);
     $('#index-note').textContent =
-      `数据源：${d.source} · 行情时点：${first ? (first.quote.quoteTime || '—') : '—'} · ${d.indexNote} · 自动刷新 20 秒` +
+      `数据源：${d.source} · 行情时点：${first ? (first.quote.quoteTime || '—') : '—'} · ${d.indexNote} · 自动刷新 ${refreshLabel(d.market, 'indices')}` +
       (d.upstreamError ? ` · 上游异常，展示上次缓存：${d.upstreamError}` : '');
     d.indices.forEach(renderIndexCard);
+    return { ok: !d.upstreamError, error: d.upstreamError || '' };
   } catch (e) {
     $('#index-note').textContent = '数据源暂不可用：' + e.message + '（页面不展示模拟数据）';
     $$('.idx-card').forEach(card => {
       state.cards.set(card.dataset.key, { cfg: { available: false, key: card.dataset.key }, hover: -1 });
       drawTrend(card);
     });
+    if (refreshPhase === null) applyRefreshSchedule(null);
+    return { ok: false, error: e.message };
   }
 }
 
@@ -389,23 +393,27 @@ function renderSummary(top) {
     `<div class="center-line muted">数据时点 ${esc(d.dataTime || '—')}（北京时间）· 来源 ${esc(d.source)}</div>`;
 }
 
-async function loadSectors() {
+async function loadSectors(force) {
   try {
-    const d = await api('/api/sectors?type=' + state.type);
+    const d = await api('/api/sectors?type=' + state.type + (force ? '&force=1' : ''));
     state.sectors = d;
     renderMarket(d.market);
+    applyRefreshSchedule(d.market);
     $('#sector-meta').textContent =
       `全市场 ${d.count} 个${d.label}（源 ${d.rawTotal} 条 / 去重后）· 数据时点 ${d.dataTime || '—'}` +
       (d.complete ? '' : ` · 分页取数 ${d.returned}/${d.rawTotal}`) +
-      (d.upstreamError ? ` · 上游异常，展示缓存：${d.upstreamError}` : '') + ' · 自动刷新 30 秒';
+      (d.upstreamError ? ` · 上游异常，展示缓存：${d.upstreamError}` : '') + ` · 自动刷新 ${refreshLabel(d.market, 'sectors')}`;
     $('#footnote').innerHTML =
       `数据来源：${esc(d.source)} / ${esc(state.indices ? state.indices.source : '东方财富行情接口')}；数据时点 ${esc(d.dataTime || '—')}（北京时间，${esc(d.market ? d.market.aShare : '')}）；口径说明见中部与底部。` +
       `<b>免责声明</b>：以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。任何投资决策应结合个人风险承受能力、资金状况和投资目标独立判断，必要时咨询持牌专业机构。过往表现不预示未来收益。`;
     renderRanks();
+    return { ok: !d.upstreamError, error: d.upstreamError || '' };
   } catch (e) {
     $('#sector-meta').textContent = '数据源暂不可用';
     $('#rank-list').innerHTML = `<div class="rank-empty">数据源暂不可用：${esc(e.message)}<br>页面不展示任何模拟或编造数据。</div>`;
     $('#footnote').textContent = '数据源暂不可用，页面不展示模拟数据。';
+    if (refreshPhase === null) applyRefreshSchedule(null);
+    return { ok: false, error: e.message };
   }
 }
 
@@ -456,6 +464,66 @@ function bindRankEvents() {
   });
 }
 
+/* ---------------- 自动刷新调度 + 手动刷新状态提示 ---------------- */
+
+const REFRESH_CFG = {
+  live:   { indices: 1000,   sectors: 5000 },   // 盘中：指数 1s / 板块 5s
+  closed: { indices: 120000, sectors: 120000 }  // 休盘：一律 120s
+};
+const refreshTimers = { indices: null, sectors: null };
+const refreshBusy = { indices: false, sectors: false };
+let refreshPhase = null;
+
+function refreshLabel(market, kind) {
+  const phase = market && market.trading ? 'live' : 'closed';
+  const ms = REFRESH_CFG[phase][kind];
+  return ms >= 1000 ? (ms / 1000) + ' 秒' : ms + ' 毫秒';
+}
+
+function applyRefreshSchedule(market) {
+  const phase = market && market.trading ? 'live' : 'closed';
+  if (phase === refreshPhase) return;   // 状态没变就不重建定时器
+  refreshPhase = phase;
+  const cfg = REFRESH_CFG[phase];
+  clearInterval(refreshTimers.indices);
+  clearInterval(refreshTimers.sectors);
+  refreshTimers.indices = setInterval(() => {
+    if (document.hidden || refreshBusy.indices) return;
+    refreshBusy.indices = true;
+    loadIndices().finally(() => { refreshBusy.indices = false; });
+  }, cfg.indices);
+  refreshTimers.sectors = setInterval(() => {
+    if (document.hidden || refreshBusy.sectors) return;
+    refreshBusy.sectors = true;
+    loadSectors().finally(() => { refreshBusy.sectors = false; });
+  }, cfg.sectors);
+}
+
+// /api/health 不请求上游，用它轻量检测盘中/休盘切换，避免 120s 定时器拖到开盘后才生效
+async function syncPhase() {
+  try {
+    const h = await api('/api/health');
+    const phase = h.market && h.market.trading ? 'live' : 'closed';
+    if (phase === refreshPhase) return;
+    applyRefreshSchedule(h.market);
+    if (!document.hidden) { loadIndices(); loadSectors(); }
+  } catch { /* 健康检查失败时保持当前调度 */ }
+}
+
+const refreshToast = $('#refresh-toast');
+let refreshToastTimer = null;
+function showRefreshToast(ok, reason) {
+  clearTimeout(refreshToastTimer);
+  const text = ok ? '刷新成功' : '刷新失败：' + (reason || '数据源暂不可用');
+  refreshToast.textContent = text;
+  refreshToast.title = text;   // 原因较长时鼠标悬停可看全文
+  refreshToast.className = 'refresh-toast show ' + (ok ? 'ok' : 'fail');
+  refreshToastTimer = setTimeout(() => {
+    refreshToast.className = 'refresh-toast';
+    refreshToast.textContent = '';
+  }, 1500);
+}
+
 /* ---------------- 交互与启动 ---------------- */
 
 function bindControls() {
@@ -475,7 +543,19 @@ function bindControls() {
     $('#rank-list').innerHTML = '<div class="rank-empty">正在取数…</div>';
     loadSectors();
   });
-  $('#refresh').addEventListener('click', () => { loadIndices(); loadSectors(); });
+  $('#refresh').addEventListener('click', async () => {
+    const btn = $('#refresh');
+    btn.disabled = true;
+    try {
+      // force=1 绕过后端缓存；两路都成功才算成功，任一失败显示具体原因
+      const rs = await Promise.all([loadIndices(true), loadSectors(true)]);
+      const errors = rs.filter(r => !r || !r.ok).map(r => (r && r.error) || '数据源暂不可用');
+      if (errors.length) showRefreshToast(false, Array.from(new Set(errors)).join('；'));
+      else showRefreshToast(true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
 }
 
 $$('.idx-card').forEach(bindCard);
@@ -483,7 +563,18 @@ bindRankEvents();
 bindControls();
 tickClock();
 setInterval(tickClock, 1000);
-loadIndices();
+loadIndices();       // 首次成功后由 applyRefreshSchedule 按盘中/休盘设定定时器
 loadSectors();
-setInterval(() => { if (!document.hidden) loadIndices(); }, 20000);
-setInterval(() => { if (!document.hidden) loadSectors(); }, 30000);
+setInterval(syncPhase, 10000);   // 每 10s 轻量检测交易状态切换
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) return;
+  // 标签页恢复可见时立即补刷一次，不等下一个定时器
+  if (!refreshBusy.indices) {
+    refreshBusy.indices = true;
+    loadIndices().finally(() => { refreshBusy.indices = false; });
+  }
+  if (!refreshBusy.sectors) {
+    refreshBusy.sectors = true;
+    loadSectors().finally(() => { refreshBusy.sectors = false; });
+  }
+});
