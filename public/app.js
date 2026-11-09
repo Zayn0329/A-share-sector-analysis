@@ -17,7 +17,7 @@ const BLUES = ['#4a7fd0', '#6a94dd', '#89ACEA', '#a6c1ef', '#bfd3f5', '#5f7fc0',
 const state = {
   indices: null,
   sectors: null,
-  order: 'up',        // up = 涨最多排前面（降序），down = 跌最多排前面（升序）
+  order: 'up',        // up = 涨幅最大（降序），down = 跌幅最大（升序）
   type: 'industry',
   limit: 10,
   cards: new Map(),
@@ -337,7 +337,7 @@ function renderRanks() {
   const top = sorted.slice(0, state.limit);
   $('#rank-rule').textContent = state.order === 'up'
     ? '排序：涨跌幅 × 流通总市值，取数值最大的 10 个板块；最大的在最上、最小的在最下'
-    : '排序：涨跌幅 × 流通总市值，取数值最小的 10 个板块（跌最多）；最小的在最上';
+    : '排序：涨跌幅 × 流通总市值，取数值最小的 10 个板块（跌幅最大）；最小的在最上';
 
   if (!top.length) {
     list.innerHTML = '<div class="rank-empty">当前数据源无可用板块数据</div>';
