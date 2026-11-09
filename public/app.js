@@ -309,6 +309,7 @@ async function loadIndices(force) {
     $('#index-note').textContent =
       `数据源：${d.source} · 行情时点：${first ? (first.quote.quoteTime || '—') : '—'} · ${d.indexNote} · 自动刷新 ${refreshLabel(d.market, 'indices')}` +
       (d.upstreamError ? ` · 上游异常，展示上次缓存：${d.upstreamError}` : '');
+    $('#index-note').title = $('#index-note').textContent;
     d.indices.forEach(renderIndexCard);
     return { ok: !d.upstreamError, error: d.upstreamError || '' };
   } catch (e) {
@@ -467,12 +468,14 @@ function renderSummary(d) {
   $('#sum-in-sub').textContent = `全市场 ${items.length} 个板块 · 净流入前 ${inflow.length} 位，扇区为净流入占比`;
   $('#sum-out-sub').textContent = `全市场 ${items.length} 个板块 · 净流出前 ${outflow.length} 位，扇区为净流出占比`;
 
-  $('#sum-center').innerHTML =
+  const centerHtml =
+    `<div class="center-line center-timestamp">数据时点 <b class="meta-time">${esc(d && d.dataTime ? d.dataTime : '—')}</b>（北京时间）· ${esc(d && d.market ? d.market.aShare : '最近交易日')} · 来源 ${esc(d && d.source ? d.source : '—')}</div>` +
     `<div class="center-big">今日盘口净额（前十对前十） <b class="${cls(net)}">${yi(net, true)} 亿</b></div>` +
     `<div class="center-line">流入前十合计 <b class="up">+${fmtNum(inSum / 1e8, 2)} 亿</b> · 流出前十合计 <b class="blue">−${fmtNum(outSum / 1e8, 2)} 亿</b></div>` +
     `<div class="center-line">${esc(notes.flow)}</div>` +
-    `<div class="center-line muted">${esc(notes.overlap)}</div>` +
-    `<div class="center-line muted">数据时点 ${esc(d && d.dataTime ? d.dataTime : '—')}（北京时间）· 来源 ${esc(d && d.source ? d.source : '—')}</div>`;
+    `<div class="center-line muted">${esc(notes.overlap)}</div>`;
+  $('#sum-center').innerHTML = centerHtml;
+  $('#sum-center').title = centerHtml.replace(/<[^>]+>/g, '');
 }
 
 async function loadSectors(force) {
@@ -481,13 +484,23 @@ async function loadSectors(force) {
     state.sectors = d;
     renderMarket(d.market);
     applyRefreshSchedule(d.market);
-    $('#sector-meta').textContent =
-      `全市场 ${d.count} 个${d.label}（源 ${d.rawTotal} 条 / 去重后）· 数据时点 ${d.dataTime || '—'}` +
-      (d.complete ? '' : ` · 分页取数 ${d.returned}/${d.rawTotal}`) +
-      (d.upstreamError ? ` · 上游异常，展示缓存：${d.upstreamError}` : '') + ` · 自动刷新 ${refreshLabel(d.market, 'sectors')}`;
-    $('#footnote').innerHTML =
-      `数据来源：${esc(d.source)} / ${esc(state.indices ? state.indices.source : '东方财富行情接口')}；数据时点 ${esc(d.dataTime || '—')}（北京时间，${esc(d.market ? d.market.aShare : '')}）；口径说明见中部与底部。` +
+    // 分段渲染：时间与各段整体不换行，但段与段之间允许折行，避免时间戳被省略号截断
+    const metaSegs = [
+      `全市场 <b class="meta-num">${esc(String(d.count))}</b> 个${esc(d.label)}（源 ${esc(String(d.rawTotal))} 条 / 去重后）`,
+      `数据时点 <b class="meta-time">${esc(d.dataTime || '—')}</b>`
+    ];
+    if (!d.complete) metaSegs.push(`分页取数 ${esc(String(d.returned))}/${esc(String(d.rawTotal))}`);
+    if (d.upstreamError) metaSegs.push(`上游异常，展示缓存：${esc(d.upstreamError)}`);
+    metaSegs.push(`自动刷新 ${esc(refreshLabel(d.market, 'sectors'))}`);
+    $('#sector-meta').innerHTML = metaSegs
+      .map((x, i) => `<span class="meta-seg">${i ? '<i class="meta-dot">·</i> ' : ''}${x}</span>`)
+      .join('');
+    $('#sector-meta').title = metaSegs.map(x => x.replace(/<[^>]+>/g, '')).join(' · ');
+    const footHtml =
+      `数据来源：${esc(d.source)} / ${esc(state.indices ? state.indices.source : '东方财富行情接口')}；数据时点 <b class="meta-time">${esc(d.dataTime || '—')}</b>（北京时间，${esc(d.market ? d.market.aShare : '')}）；口径说明见中部与底部。` +
       `<b>免责声明</b>：以上内容基于公开数据和量化分析，仅供参考，不构成投资建议。市场有风险，投资需谨慎。任何投资决策应结合个人风险承受能力、资金状况和投资目标独立判断，必要时咨询持牌专业机构。过往表现不预示未来收益。`;
+    $('#footnote').innerHTML = footHtml;
+    $('#footnote').title = footHtml.replace(/<[^>]+>/g, '');
     renderRanks();
     renderSummary(d);
     return { ok: !d.upstreamError, error: d.upstreamError || '' };

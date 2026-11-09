@@ -29,13 +29,19 @@
    - 指数卡行情时点显示到**秒**（`HH:MM:SS`），盘中追加「实时」字样与脉冲圆点（`prefers-reduced-motion` 下关闭动画）。
    - 顶部说明更新为「盘中分时末端由实时报价驱动、横轴按全天交易分钟铺展」。
 
+4. **修复「数据时点」显示不全（显示修复）**
+   - 根因：`public/styles.css` 中 `.sector-meta` 设有 `max-width: 380px` + `white-space: nowrap` + `text-overflow: ellipsis`，切换栏右侧元信息被强制单行省略，截图实测停在「数据时点 2026-11-09 15:3…」，秒数丢失。
+   - 改为**分段折行**：`#sector-meta` 按「全市场板块数 / 数据时点 / 自动刷新」等拆成 `.meta-seg`，段内不换行（时间戳 `.meta-time` 整体 `nowrap` 且加深加粗），段间可折行；移除固定宽度与省略号，`title` 提供全文。切换栏高度改为自适应。
+   - 底部中间说明把「数据时点 …（北京时间）· 盘后 · 来源 …」提到**首行**并允许纵向滚动（`overflow-y: auto`），不再被 `overflow: hidden` 裁掉；脚注放宽到 5 行并加全文 `title`；顶部指数说明改为可折行，不再省略。
+   - 已用 Edge 无头截图在 1600px / 1100px / 820px 三种宽度验证：时间戳均完整显示到秒，无省略号、无横向拖条、无重叠。
+
 ### 涉及文件
 
 | 文件 | 改动 |
 |------|------|
 | `server.js` | `INDICES` 增加全天分钟数与 5 点时间刻度；`fetchIndex` 盘中融合实时报价 / 分时量并返回 `isLive`、`livePoint`、`minutes`；`indexNote` 更新 |
-| `public/app.js` | 重写 `drawTrend`（全天时间轴、双轴刻度、独立量区、实时末端点）；`bindCard` 悬停坐标同步；`renderIndexCard` 秒级时点与 `is-live` 标记 |
-| `public/styles.css` | `.idx-card.is-live .idx-time::after` 脉冲动画与减少动效适配 |
+| `public/app.js` | 重写 `drawTrend`（全天时间轴、双轴刻度、独立量区、实时末端点）；`bindCard` 悬停坐标同步；`renderIndexCard` 秒级时点与 `is-live` 标记；`loadSectors` 分段渲染数据时点并写入全文 `title`，`renderSummary` 把时点提到首行 |
+| `public/styles.css` | `.idx-card.is-live .idx-time::after` 脉冲动画；`.sector-meta` 改分段折行、新增 `.meta-seg` / `.meta-time`，切换栏自适应高度，`.sum-center` 允许纵向滚动，脚注与顶部说明不再截断 |
 
 ### 注意
 
