@@ -120,7 +120,19 @@ button { cursor: pointer; }
   background: rgba(38, 42, 50, .92); color: #fff; border-radius: 4px;
   padding: 4px 7px; font-size: 11px; line-height: 1.5; white-space: nowrap;
 }
-.idx-axis { flex: 0 0 13px; height: 13px; display: flex; justify-content: space-between; font-size: 10px; color: #a3a8b1; }
+.idx-axis { flex: 0 0 13px; height: 13px; display: flex; justify-content: space-between; gap: 2px; font-size: 10px; color: #a3a8b1; overflow: hidden; }
+.idx-card.is-live .idx-time::after {
+  content: ""; display: inline-block; width: 6px; height: 6px; margin-left: 5px;
+  border-radius: 50%; background: var(--up); vertical-align: middle;
+  animation: livePulse 1.4s ease-in-out infinite;
+}
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .35; transform: scale(.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .idx-card.is-live .idx-time::after { animation: none; }
+}
 .zone-note {
   flex: 0 0 19px; height: 19px; padding: 0 14px;
   font-size: 10.5px; color: #9a9fa8; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;

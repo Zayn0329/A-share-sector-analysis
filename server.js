@@ -21,9 +21,9 @@ const CLIST_URL = 'https://push2.eastmoney.com/api/qt/clist/get';
 const UT = 'b2884a393a59ad64002292a3e90d46a5';
 
 const INDICES = [
-  { key: 'sh',  secid: '1.000001', name: '上证指数', code: '000001.SH', session: 'a',  axis: ['09:30', '11:30 / 13:00', '15:00'] },
-  { key: 'hsi', secid: '100.HSI',  name: '恒生指数', code: 'HSI.HK',    session: 'hk', axis: ['09:30', '12:00 / 13:00', '16:00'] },
-  { key: 'cyb', secid: '0.399006', name: '创业板指', code: '399006.SZ', session: 'a',  axis: ['09:30', '11:30 / 13:00', '15:00'] }
+  { key: 'sh',  secid: '1.000001', name: '上证指数', code: '000001.SH', session: 'a',  minutes: 241, axis: ['09:30', '10:30', '11:30 / 13:00', '14:00', '15:00'] },
+  { key: 'hsi', secid: '100.HSI',  name: '恒生指数', code: 'HSI.HK',    session: 'hk', minutes: 331, axis: ['09:30', '10:30', '12:00 / 13:00', '14:30', '16:00'] },
+  { key: 'cyb', secid: '0.399006', name: '创业板指', code: '399006.SZ', session: 'a',  minutes: 241, axis: ['09:30', '10:30', '11:30 / 13:00', '14:00', '15:00'] }
 ];
 
 const SECTOR_TYPES = {
@@ -168,17 +168,48 @@ async function fetchIndex(cfg) {
     };
   }).filter(p => p.price !== null);
 
+  const quoteTime = bjTimeStr(d.f86);
+  const lastPrice = price(d.f43);
+  const m = marketStatus();
+  const isLive = cfg.session === 'a' ? m.aShare === '盘中' : m.hk === '盘中';
+
+  // 盘中：分时序列末端是分钟级快照，用同一来源的真实实时报价驱动最后一笔，
+  // 使 1 秒刷新时曲线末端跟着最新价跳动；保留原始值 rawPrice 供核对，不编造数值。
+  let livePoint = null;
+  if (isLive && points.length && lastPrice !== null) {
+    const tail = points[points.length - 1];
+    const rawPrice = tail.price;
+    tail.price = lastPrice;
+    tail.rawPrice = rawPrice;
+    tail.live = true;
+
+    // 实时累计成交量与分时各分钟成交量同口径；上游分时若略滞后，把差额补到当前分钟
+    const sumV = points.reduce((s, p) => s + (p.volume || 0), 0);
+    const qVol = num(d.f47);
+    if (qVol !== null && sumV > 0) {
+      const extra = qVol - sumV;
+      if (extra > 0 && extra < sumV * 0.05) {
+        tail.volume = (tail.volume || 0) + extra;
+        tail.liveVolume = true;
+      }
+    }
+    livePoint = { time: tail.time, price: lastPrice, rawPrice, quoteTime };
+  }
+
   return {
     available: true,
     quote: {
-      last: price(d.f43), open: price(d.f46), high: price(d.f44), low: price(d.f45),
+      last: lastPrice, open: price(d.f46), high: price(d.f44), low: price(d.f45),
       prevClose: price(d.f60), change: price(d.f169), changePct: pct(d.f170),
       volume: num(d.f47), amount: num(d.f48),
-      quoteTime: bjTimeStr(d.f86)
+      quoteTime
     },
     trends: {
       preClose: num(t.data.preClose),
       decimal,
+      minutes: cfg.minutes,
+      isLive,
+      livePoint,
       date: trends.length ? String(trends[0]).slice(0, 10) : null,
       points
     }
@@ -193,7 +224,7 @@ async function fetchIndices() {
     return { ...cfg, available: false, error: String(r.reason && r.reason.message || r.reason) };
   });
   if (indices.every(x => !x.available)) throw new Error('三大指数行情全部获取失败');
-  return { indices, source: SOURCE_QUOTE, indexNote: '分时图含价格线、均价线与每分钟分时量；休市时为最近交易日完整分时。' };
+  return { indices, source: SOURCE_QUOTE, indexNote: '盘中分时末端由实时报价驱动、横轴按全天交易分钟铺展（右侧留白为剩余时段），含价格线、均价线与每分钟分时量；休市时为最近交易日完整分时。' };
 }
 
 /* ---------------- 板块：全市场分页取数 + 排序指标 ---------------- */

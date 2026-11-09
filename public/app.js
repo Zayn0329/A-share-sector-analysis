@@ -86,6 +86,8 @@ function tickClock() {
 
 /* ---------------- 指数分时图（Canvas） ---------------- */
 
+const TREND_PAD_L = 36, TREND_PAD_R = 42;
+
 function drawTrend(card) {
   const st = state.cards.get(card.dataset.key);
   const canvas = card.querySelector('canvas');
@@ -111,13 +113,16 @@ function drawTrend(card) {
     return;
   }
 
-  const padL = 4, padR = 44, padT = 5, padB = 2;
-  const plotW = w - padL - padR;
-  const priceH = (h - padT - padB) * 0.72;
-  const volTop = padT + priceH + 5;
+  const padL = TREND_PAD_L, padR = TREND_PAD_R, padT = 4, padB = 2;
+  const plotW = Math.max(20, w - padL - padR);
+  const priceH = (h - padT - padB) * 0.66;
+  const volTop = padT + priceH + 4;
   const volH = Math.max(6, h - padB - volTop);
   const q = cfg.quote || {};
   const pre = cfg.trends.preClose || q.prevClose || pts[0].price;
+  // 横轴按全天交易分钟铺展：盘中曲线只画到当前，右侧留白为剩余时段
+  const totalMinutes = Math.max(pts.length, cfg.trends.minutes || pts.length);
+  const xOf = i => padL + (totalMinutes <= 1 ? 0 : i / (totalMinutes - 1) * plotW);
 
   let dev = 0;
   for (const p of pts) {
@@ -127,42 +132,37 @@ function drawTrend(card) {
   dev = dev * 1.15 || pre * 0.005;
   const yTop = pre + dev, yBot = pre - dev;
   const yOf = v => padT + (yTop - v) / (yTop - yBot) * priceH;
-  const xOf = i => padL + (pts.length < 2 ? 0 : i / (pts.length - 1) * plotW);
   const color = (q.changePct || 0) >= 0 ? UP : DOWN;
 
-  // 网格
+  // 水平网格 + 左价格轴 / 右涨跌幅轴（5 档，中档为昨收 0% 基准）
   ctx.lineWidth = 1;
+  ctx.font = '10px "Segoe UI", sans-serif';
   for (let i = 0; i <= 4; i++) {
     const y = padT + i * priceH / 4;
-    ctx.strokeStyle = i === 2 ? '#ded3bb' : '#f1ece1';
-    ctx.setLineDash(i === 2 ? [3, 3] : []);
+    const isBase = i === 2;
+    ctx.strokeStyle = isBase ? '#c9b98f' : '#ece5d7';
+    ctx.setLineDash(isBase ? [4, 3] : []);
     ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(padL + plotW, y); ctx.stroke();
-  }
-  for (let i = 0; i <= 4; i++) {
-    const x = padL + i * plotW / 4;
-    ctx.strokeStyle = '#f4f0e7';
-    ctx.setLineDash([]);
-    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, padT + priceH); ctx.stroke();
+    const pv = yTop - i * (yTop - yBot) / 4;
+    const cp = (pv - pre) / pre * 100;
+    ctx.fillStyle = '#a3a8b1'; ctx.textAlign = 'right';
+    ctx.fillText(fmtNum(pv, 0), padL - 3, y + 3);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = cp > 0.005 ? hexA(UP, 0.9) : cp < -0.005 ? hexA(DOWN, 0.9) : '#9a9fa8';
+    ctx.fillText((cp > 0.005 ? '+' : cp < -0.005 ? '−' : '') + Math.abs(cp).toFixed(2) + '%', padL + plotW + 3, y + 3);
   }
   ctx.setLineDash([]);
 
-  // 坐标标签
-  ctx.font = '10px "Segoe UI", sans-serif';
-  ctx.fillStyle = '#a3a8b1';
-  ctx.textAlign = 'left';
-  ctx.fillText(fmtNum(yTop, 2), padL + 1, padT + 9);
-  ctx.fillText(fmtNum(yBot, 2), padL + 1, padT + priceH - 2);
-  ctx.textAlign = 'right';
-  ctx.fillStyle = hexA(UP, 0.8);
-  ctx.fillText('+' + (dev / pre * 100).toFixed(2) + '%', w - 2, padT + 9);
-  ctx.fillStyle = hexA(DOWN, 0.8);
-  ctx.fillText('−' + (dev / pre * 100).toFixed(2) + '%', w - 2, padT + priceH - 2);
-  ctx.fillStyle = '#a3a8b1';
-  ctx.fillText(fmtNum(pre, 2), w - 2, padT + priceH / 2 - 2);
+  // 垂直网格（全天 4 等分）
+  for (let i = 0; i <= 4; i++) {
+    const x = padL + i * plotW / 4;
+    ctx.strokeStyle = '#f1ece1';
+    ctx.beginPath(); ctx.moveTo(x, padT); ctx.lineTo(x, volTop + volH); ctx.stroke();
+  }
 
   // 价格面积 + 价格线
   const grad = ctx.createLinearGradient(0, padT, 0, padT + priceH);
-  grad.addColorStop(0, hexA(color, 0.20));
+  grad.addColorStop(0, hexA(color, 0.18));
   grad.addColorStop(1, hexA(color, 0.01));
   ctx.beginPath();
   ctx.moveTo(xOf(0), padT + priceH);
@@ -182,7 +182,7 @@ function drawTrend(card) {
   ctx.lineJoin = 'round';
   ctx.stroke();
 
-  // 均价线（港股接口部分时段无均价，缺失则跳过）
+  // 均价线
   const avgCount = pts.filter(p => p.avg && p.avg > 0).length;
   if (avgCount > pts.length * 0.4) {
     ctx.beginPath();
@@ -199,17 +199,33 @@ function drawTrend(card) {
     ctx.setLineDash([]);
   }
 
-  // 分时量（每分钟成交量，红涨绿跌）
-  const maxV = Math.max(1, ...pts.map(p => p.volume));
-  const bw = Math.max(1, Math.min(4, plotW / Math.max(1, pts.length) * 0.7));
-  ctx.strokeStyle = '#eee7d9';
-  ctx.beginPath(); ctx.moveTo(padL, volTop - 3); ctx.lineTo(padL + plotW, volTop - 3); ctx.stroke();
+  // 独立成交量区：分隔线 + 每分钟量柱（红涨绿跌）+ 峰值刻度
+  const maxV = Math.max(1, ...pts.map(p => p.volume || 0));
+  ctx.strokeStyle = '#e5ddcc';
+  ctx.beginPath(); ctx.moveTo(padL, volTop - 2); ctx.lineTo(padL + plotW, volTop - 2); ctx.stroke();
+  const bw = Math.max(1, Math.min(4, plotW / Math.max(1, totalMinutes) * 0.7));
   pts.forEach((p, i) => {
-    const bh = Math.min(volH, p.volume / maxV * volH);
+    const bh = Math.min(volH, (p.volume || 0) / maxV * volH);
     const rising = i === 0 ? p.price >= pre : p.price >= pts[i - 1].price;
     ctx.fillStyle = hexA(rising ? UP : DOWN, 0.58);
     ctx.fillRect(xOf(i) - bw / 2, volTop + volH - bh, bw, bh);
   });
+  ctx.font = '9px "Segoe UI", sans-serif';
+  ctx.fillStyle = '#b3b8c0';
+  ctx.textAlign = 'right';
+  ctx.fillText(fmtNum(maxV / 1e4, 0) + '万', padL - 3, volTop + 8);
+  ctx.textAlign = 'left';
+  ctx.fillText(fmtNum(maxV / 1e4, 0) + '万', padL + plotW + 3, volTop + 8);
+
+  // 盘中实时末端点：外圈光晕 + 实心点（末端价由实时报价驱动）
+  if (cfg.trends.livePoint && pts.length) {
+    const x = xOf(pts.length - 1), y = yOf(pts[pts.length - 1].price);
+    ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2);
+    ctx.fillStyle = hexA(color, 0.16); ctx.fill();
+    ctx.beginPath(); ctx.arc(x, y, 2.8, 0, Math.PI * 2);
+    ctx.fillStyle = color; ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.2; ctx.stroke();
+  }
 
   // 十字光标
   if (st && st.hover >= 0 && st.hover < pts.length) {
@@ -224,7 +240,7 @@ function drawTrend(card) {
     ctx.fillStyle = color; ctx.fill();
     ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
     const cp = (p.price - pre) / pre * 100;
-    tip.innerHTML = `<b>${esc(p.time)}</b> 价 ${fmtNum(p.price, 2)} · ${signed(cp, 2)}%<br>分时量 ${fmtNum(p.volume / 1e4, 0)}万手` +
+    tip.innerHTML = `<b>${esc(p.time)}${p.live ? ' · 实时' : ''}</b> 价 ${fmtNum(p.price, 2)} · ${signed(cp, 2)}%<br>分时量 ${fmtNum(p.volume / 1e4, 0)}万手` +
       (p.avg ? ` · 均价 ${fmtNum(p.avg, 2)}` : '');
     tip.style.display = 'block';
     tip.style.left = (x > w * 0.62 ? '6px' : Math.max(4, Math.min(w - 150, x + 8)) + 'px');
@@ -243,8 +259,9 @@ function bindCard(card) {
     const pts = st.cfg.trends.points;
     if (!pts.length) return;
     const r = canvas.getBoundingClientRect();
-    const plotW = r.width - 4 - 44;
-    const i = Math.round(((e.clientX - r.left) - 4) / plotW * (pts.length - 1));
+    const plotW = r.width - TREND_PAD_L - TREND_PAD_R;
+    const total = Math.max(pts.length, (st.cfg.trends && st.cfg.trends.minutes) || pts.length);
+    const i = Math.round(((e.clientX - r.left) - TREND_PAD_L) / plotW * (total - 1));
     st.hover = Math.max(0, Math.min(pts.length - 1, i));
     drawTrend(card);
   });
@@ -262,6 +279,7 @@ function renderIndexCard(cfg) {
   const old = state.cards.get(cfg.key);
   state.cards.set(cfg.key, { cfg, hover: old ? old.hover : -1 });
   card.classList.toggle('is-error', !cfg.available);
+  card.classList.toggle('is-live', !!(cfg.available && cfg.trends && cfg.trends.isLive));
   if (cfg.available) {
     const q = cfg.quote, t = cfg.trends;
     card.querySelector('.idx-price').textContent = fmtNum(q.last, 2);
@@ -270,7 +288,8 @@ function renderIndexCard(cfg) {
     chg.className = 'idx-chg ' + cls(q.changePct);
     card.querySelector('.idx-extra').textContent =
       `成交额 ${money(q.amount)} · 最高 ${fmtNum(q.high, 2)} · 最低 ${fmtNum(q.low, 2)}`;
-    card.querySelector('.idx-time').textContent = (t.date || '—') + ' · 行情 ' + (q.quoteTime || '—').slice(11, 16);
+    card.querySelector('.idx-time').textContent =
+      (t.date || '—') + ' · ' + (q.quoteTime || '—').slice(11, 19) + (t.isLive ? ' · 实时' : '');
     card.querySelector('.idx-axis').innerHTML = cfg.axis.map(x => `<span>${esc(x)}</span>`).join('');
   } else {
     card.querySelector('.idx-price').textContent = '—';
